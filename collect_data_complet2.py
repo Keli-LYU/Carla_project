@@ -45,6 +45,71 @@ def get_weather_presets():
         carla.WeatherParameters.ClearSunset
     ]
 
+def spawn_static_actors(world, blueprint_library, num_vehicles=3, num_walkers=6):
+    """Spawn a small set of static vehicles and pedestrians for scene diversity."""
+    static_actors = []
+
+    # Static vehicles
+    vehicle_bps = blueprint_library.filter('vehicle.*')
+    spawn_points = world.get_map().get_spawn_points()
+    random.shuffle(spawn_points)
+
+    spawned_vehicles = 0
+    for spawn_point in spawn_points:
+        if spawned_vehicles >= num_vehicles:
+            break
+        if not vehicle_bps:
+            break
+
+        vehicle_bp = random.choice(vehicle_bps)
+        if vehicle_bp.has_attribute('role_name'):
+            vehicle_bp.set_attribute('role_name', 'static')
+
+        vehicle = world.try_spawn_actor(vehicle_bp, spawn_point)
+        if vehicle is None:
+            continue
+
+        try:
+            vehicle.set_autopilot(False)
+            vehicle.apply_control(carla.VehicleControl(throttle=0.0, brake=1.0, hand_brake=True))
+            vehicle.set_simulate_physics(False)
+        except Exception:
+            pass
+
+        static_actors.append(vehicle)
+        spawned_vehicles += 1
+
+    # Static pedestrians
+    walker_bps = blueprint_library.filter('walker.pedestrian.*')
+    spawned_walkers = 0
+
+    for _ in range(num_walkers):
+        if not walker_bps:
+            break
+
+        nav_location = world.get_random_location_from_navigation()
+        if nav_location is None:
+            continue
+
+        walker_bp = random.choice(walker_bps)
+        if walker_bp.has_attribute('is_invincible'):
+            walker_bp.set_attribute('is_invincible', 'false')
+
+        walker = world.try_spawn_actor(walker_bp, carla.Transform(nav_location))
+        if walker is None:
+            continue
+
+        try:
+            walker.set_simulate_physics(False)
+        except Exception:
+            pass
+
+        static_actors.append(walker)
+        spawned_walkers += 1
+
+    print(f"Spawned static actors: {spawned_vehicles} vehicles, {spawned_walkers} pedestrians")
+    return static_actors
+
 def main():
     parser = argparse.ArgumentParser(description="CARLA Data Collection Script (Single Map)")
     parser.add_argument('--host', default='127.0.0.1', help='Server IP')
@@ -63,6 +128,10 @@ def main():
 
     print(f"=== Starting data collection for {args.map} ===")
     print(f"Data will be saved to: {map_save_dir}")
+
+    world = None
+    tm = None
+    static_actor_list = []
 
     try:
         client = carla.Client(args.host, args.port)
@@ -90,6 +159,9 @@ def main():
         
         blueprint_library = world.get_blueprint_library()
         vehicle_bp = blueprint_library.filter('model3')[0]
+
+        #障碍参数Parameters for static actors
+        static_actor_list = spawn_static_actors(world, blueprint_library, num_vehicles=15, num_walkers=10)
         
         weathers = get_weather_presets()
         images_per_weather = math.ceil(args.nb_images / len(weathers))
@@ -237,6 +309,19 @@ def main():
         print(f"An error occurred: {e}")
         
     finally:
+        for actor in reversed(static_actor_list):
+            if actor.is_alive:
+                actor.destroy()
+
+        if tm is not None:
+            tm.set_synchronous_mode(False)
+
+        if world is not None:
+            settings = world.get_settings()
+            settings.synchronous_mode = False
+            settings.fixed_delta_seconds = None
+            world.apply_settings(settings)
+
         print("Script terminated.")
 
 if __name__ == '__main__':
