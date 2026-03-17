@@ -51,7 +51,7 @@ def main():
     parser.add_argument('--host', default='127.0.0.1', help='Server IP')
     parser.add_argument('-p', '--port', default=2000, type=int, help='TCP Port')
     parser.add_argument('-n', '--nb_images', default=2000, type=int, help='Total number of images to save')
-    parser.add_argument('--maps', nargs='+', default=['Town03', 'Town10HD'], help='List of maps to use (e.g. Town01 Town02)')
+    parser.add_argument('--maps', nargs='+', default=['Town03'], help='List of maps to use (e.g. Town01 Town02)')
     args = parser.parse_args()
 
     # Create directories
