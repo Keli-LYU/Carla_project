@@ -88,6 +88,16 @@ def main():
         images_sauvegardees_total = 0
         global_frame_index = 0 # Utilisé pour nommer les images continuellement (000000.png, 000001.png...)
 
+        # Sécurité : vérifier si le serveur est bloqué en mode synchrone à cause d'un crash précédent
+        try:
+            temp_world = client.get_world()
+            settings = temp_world.get_settings()
+            if settings.synchronous_mode:
+                settings.synchronous_mode = False
+                temp_world.apply_settings(settings)
+        except Exception:
+            pass
+
         for map_name in maps_to_use:
             if images_sauvegardees_total >= args.nb_images:
                 break
@@ -124,7 +134,7 @@ def main():
                     
                 spawn_point = random.choice(spawn_points)
                 vehicule = world.spawn_actor(bp_vehicule, spawn_point)
-                vehicule.set_autopilot(True)
+                vehicule.set_autopilot(True, tm.get_port())
                 
                 liste_acteurs = [vehicule]
                 
@@ -155,7 +165,7 @@ def main():
                 cam_seg.listen(process_img_seg)
                 
                 # Mettre le jeu en route pour quelques frames afin que le véhicule tombe au sol et s'initialise
-                for _ in range(40):
+                for _ in range(100):
                     world.tick()
                     
                 # Début de la collecte pour cette condition précise
@@ -204,6 +214,14 @@ def main():
                         if hasattr(acteur, 'stop'):
                             acteur.stop() # On arrête l'écoute des capteurs
                         acteur.destroy()
+            
+            # Restaurer le mode asynchrone avant de changer de map pour éviter que le serveur se bloque
+            settings = world.get_settings()
+            settings.synchronous_mode = False
+            settings.fixed_delta_seconds = None
+            world.apply_settings(settings)
+            
+            tm.set_synchronous_mode(False)
 
 
         print("\n=== Collecte de données terminée avec succès ! ===")
